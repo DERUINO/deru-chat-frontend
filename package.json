@@ -1,0 +1,46 @@
+{
+  "name": "deru-chat-frontend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "lint": "vue-cli-service lint"
+  },
+  "author": "DERUINO",
+  "license": "ISC",
+  "dependencies": {
+    "core-js": "^3.6.5",
+    "jwt-decode": "^3.1.2",
+    "modules": "^0.4.0",
+    "node-sass": "^6.0.1",
+    "socket.io-client": "^4.4.1",
+    "vue": "^2.6.11",
+    "vue-cli-plugin-vuetify": "^2.4.5",
+    "vuetify": "^2.6.3",
+    "vuetify-loader": "^1.7.3",
+    "vuex": "^3.6.2"
+  },
+  "devDependencies": {
+    "@vue/cli-plugin-babel": "~4.5.0",
+    "@vue/cli-plugin-router": "^4.5.13",
+    "@vue/cli-service": "~4.5.0",
+    "deepmerge": "^4.2.2",
+    "sass": "^1.32.13",
+    "sass-loader": "^10.2.1",
+    "vue-router": "^3.5.2",
+    "vue-template-compiler": "^2.6.11",
+    "@vue/cli-plugin-eslint": "^4.5.10",
+    "@vue/cli-plugin-unit-jest": "^4.5.15",
+    "@vue/cli-plugin-vuex": "~4.5.0",
+    "@vue/eslint-config-standard": "^6.0.0",
+    "babel-eslint": "^10.1.0",
+    "eslint": "^7.17.0",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^5.0.0",
+    "eslint-plugin-vue": "^7.4.1"
+  }
+}
