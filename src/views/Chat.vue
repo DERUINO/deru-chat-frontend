@@ -39,8 +39,21 @@
                         <span>{{ unreadMessagesCount }}</span>
                     </div>
                     <div class="chat-send">
-                        <input type="text" v-model="message.current" @keyup.enter="sendMessage">
-                        <button type="button" @click="sendMessage">отправить</button>
+                        <input
+                            ref="sendMessageInput"
+                            type="text"
+                            v-model="message.current"
+                            @keyup.enter="sendMessage">
+                        <div class="chat-send__button">
+                            <v-btn
+                                @click="sendMessage"
+                                icon
+                            >
+                                <v-icon dark>
+                                    mdi-send
+                                </v-icon>
+                            </v-btn>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -50,6 +63,7 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex';
+import moment from 'moment';
 
 export default {
     name: 'Chat',
@@ -66,6 +80,7 @@ export default {
             isScrollEnded: true,
             allMessagesReaded: true,
             unreadMessagesCount: 0,
+            isFocused: false,
         };
     },
     computed: {
@@ -92,17 +107,25 @@ export default {
             let obj = {};
 
             return this.messages.map(item => {
-                if (item.authorId._id === obj.authorId?._id) {
-                    return {
+                if (
+                    (item.authorId._id === obj.authorId?._id) &&
+                    (moment(item.createdAt) <= (moment(obj.createdAt) + 60000))) {
+                    obj = {
                         ...item,
                         concated: true,
                     };
+
+                    return obj;
                 }
 
                 obj = item;
 
                 return item;
             });
+        },
+
+        isUnreadMessagesExists() {
+            return this.unreadMessagesCount > 0 && this.isFocused && this.isScrollEnded;
         },
     },
     async created() {
@@ -111,6 +134,25 @@ export default {
     },
     mounted() {
         this.scrollEvent();
+
+        window.onfocus = () => {
+            this.isFocused = true;
+
+            if (this.isUnreadMessagesExists) {
+                this.readAllMessages();
+            }
+        };
+
+        window.onblur = () => {
+            this.isFocused = false;
+        };
+    },
+    watch: {
+        isScrollEnded() {
+            if (this.isUnreadMessagesExists) {
+                this.readAllMessages();
+            }
+        },
     },
     methods: {
         ...mapActions({
@@ -123,7 +165,7 @@ export default {
             if (this.message.current) {
                 const data = {
                     authorId: {
-                        id: this.userInfo._id,
+                        _id: this.userInfo._id,
                         username: this.userInfo.username,
                     },
                     recieveId: this.dialog.recieveId,
@@ -149,14 +191,16 @@ export default {
         },
 
         async selectUser(user) {
-            this.dialog = {
-                recieveId: user._id,
-                name: user.username,
-            };
+            if (this.dialog.recieveId !== user._id) {
+                this.dialog = {
+                    recieveId: user._id,
+                    name: user.username,
+                };
 
-            await this.getMessages({ authorId: this.userInfo._id, recieveId: user._id });
+                await this.getMessages({ authorId: this.userInfo._id, recieveId: user._id });
 
-            this.lastMessageScroll();
+                this.lastMessageScroll();
+            }
         },
 
         lastMessageScroll() {
@@ -167,20 +211,12 @@ export default {
                 behavior: 'auto',
                 block: 'end',
             });
-
-            if (this.unreadMessagesCount > 0) {
-                setTimeout(() => {
-                    this.messages[this.messages.length - 1].unread = false;
-                }, 1000);
-            }
         },
 
         isScrollBottom() {
             const block = this.$refs.messages;
             if (block.scrollTop === block.scrollHeight - block.clientHeight) {
                 this.isScrollEnded = true;
-                this.allMessagesReaded = true;
-                this.unreadMessagesCount = 0;
             } else {
                 this.isScrollEnded = false;
             }
@@ -210,7 +246,26 @@ export default {
             });
         },
 
+        readAllMessages() {
+            setTimeout(() => {
+                for (let i = 0; i < this.unreadMessagesCount; i++) {
+                    this.messages[this.messages.length - (i + 1)].unread = false;
+                };
+
+                this.allMessagesReaded = true;
+                this.unreadMessagesCount = 0;
+            });
+        },
+
         convertDate(date) {
+            if (moment() >= date) {
+                return moment(date)
+                    .lang('ru')
+                    .format('H:mm');
+            }
+            return moment(date)
+                .lang('ru')
+                .fromNow();
             return new Date(date).toLocaleString('ru', { day: 'numeric', month: 'numeric', year: '2-digit', hour: 'numeric', minute: 'numeric' });
         },
     },
@@ -263,9 +318,19 @@ export default {
         .chat-send {
             display: flex;
             width: 100%;
+            border-top: 1px solid gray;
 
             input {
+                outline: none;
+                height: 45px;
                 width: 100%;
+                padding: 0 15px;
+            }
+
+            &__button {
+                display: flex;
+                align-items: center;
+                margin: 0 15px;
             }
         }
     }
@@ -287,7 +352,7 @@ export default {
             .chat-messages-container {
                 position: relative;
                 width: 100%;
-                height: 414px;
+                height: 395px;
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-end;
@@ -298,9 +363,14 @@ export default {
                     display: flex;
                     flex-direction: column;
 
+                    .chat-messages-bottom {
+                        padding: 5px 0;
+                    }
+
                     .chat-message {
                         width: 100%;
                         padding: 0 15px;
+                        padding-top: 3px;
 
                         &.unreaded {
                             background: rgba(0,0,0,0.1);
@@ -312,7 +382,7 @@ export default {
 
                         .message-header {
                             display: flex;
-                            justify-content: space-between;
+                            justify-content: flex-start;
                             margin-bottom: 5px;
 
                             .message-name {
@@ -332,7 +402,7 @@ export default {
 
                         .message-text {
                             font-size: 14px;
-                            margin-bottom: 8px;
+                            margin-bottom: 3px;
                         }
                     }
                 }
@@ -354,7 +424,7 @@ export default {
                 cursor: pointer;
 
                 &:hover {
-                    background: rgba(0,0,0,0.05);
+                    background: #e3e3e3;
                 }
 
                 img {

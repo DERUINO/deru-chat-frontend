@@ -27,8 +27,6 @@ const actions = {
             payload,
         });
 
-        console.log(res);
-
         commit('SET_MESSAGES_LIST', res.data);
     },
 
@@ -37,15 +35,14 @@ const actions = {
             authorId: req.authorId,
             recieveId: req.recieveId,
             text: req.text,
+            createdAt: req.createdAt,
         };
 
-        const res = await send({
+        await send({
             uri: 'chat/add_message',
             reqType: 'post',
             payload,
         });
-
-        console.log(res);
     },
 };
 

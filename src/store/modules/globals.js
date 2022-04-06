@@ -79,14 +79,12 @@ const actions = {
         });
 
         if (res.status === 200) {
-            // TODO исправить пуш на страницу авторизации
-            this.$router.push('/login');
-        } else {
-            const { errors = [] } = res.errors;
-            errors.forEach(error => {
-                alert(error.msg);
-            });
+            return true;
         }
+        const { errors = [] } = res.errors;
+        errors.forEach(error => {
+            alert(error.msg);
+        });
     },
 
     connectToSocket({ commit, getters }) {

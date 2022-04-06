@@ -89,7 +89,11 @@ export default {
                 email,
             };
 
-            await this.registration(data);
+            const isUserRegistered = await this.registration(data);
+
+            if (isUserRegistered) {
+                this.$router.push({ name: 'Login' });
+            }
         },
     },
 };
