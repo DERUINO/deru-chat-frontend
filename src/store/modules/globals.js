@@ -37,7 +37,6 @@ const actions = {
         const res = await send({
             uri: 'settings/users/info',
             reqType: 'post',
-            payload: { id: req.id },
         });
 
         if (res.status === 200) {

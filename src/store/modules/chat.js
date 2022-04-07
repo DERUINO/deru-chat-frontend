@@ -1,24 +1,52 @@
 import { send } from '../../tools';
 
 const state = {
+    dialogs: [],
+    dialogInfo: {
+        id: null,
+    },
     messages: [],
+    messagesCount: 0,
 };
 
 const getters = {
     messages: state => state.messages,
+    dialogs: state => state.dialogs,
+    messagesCount: state => state.messagesCount,
+    dialogId: state => state.dialogInfo.id,
 };
 
 const mutations = {
     SET_MESSAGES_LIST(state, res) {
         state.messages = res;
     },
+    SET_MESSAGES_COUNT(state, res) {
+        state.messagesCount = res;
+    },
+    SET_DIALOGS_LIST(state, res) {
+        state.dialogs = res;
+    },
+    SET_DIALOG_ID(state, res) {
+        state.dialogInfo.id = res;
+    },
+    CLEAR_MESSAGES(state) {
+        state.messages = [];
+    },
 };
 
 const actions = {
+    async getDialogs({ commit }) {
+        const res = await send({
+            uri: 'chat/get_dialogs',
+            reqType: 'get',
+        });
+
+        commit('SET_DIALOGS_LIST', res.data);
+    },
+
     async getMessages({ commit }, req) {
         const payload = {
-            authorId: req.authorId,
-            recieveId: req.recieveId,
+            dialogId: req.dialogId,
         };
 
         const res = await send({
@@ -28,21 +56,39 @@ const actions = {
         });
 
         commit('SET_MESSAGES_LIST', res.data);
+        commit('SET_MESSAGES_COUNT', res.count);
+        commit('SET_DIALOG_ID', res.data[0]?.dialogId);
     },
 
-    async addMessage({ commit }, req) {
+    async getMoreMessages({ commit, getters }, req) {
         const payload = {
-            authorId: req.authorId,
-            recieveId: req.recieveId,
-            text: req.text,
-            createdAt: req.createdAt,
+            dialogId: req.dialogId,
+            step: getters.messages.length +
+                  (getters.messagesCount - getters.messages.length >= 20
+                      ? 20
+                      : getters.messagesCount - getters.messages.length),
         };
 
-        await send({
-            uri: 'chat/add_message',
+        const res = await send({
+            uri: 'chat/get_messages',
             reqType: 'post',
             payload,
         });
+
+        const messages = res.data.concat(getters.messages);
+
+        commit('SET_MESSAGES_LIST', messages);
+        commit('SET_MESSAGES_COUNT', res.count);
+    },
+
+    async addMessage({ commit }, req) {
+        const res = await send({
+            uri: 'chat/add_message',
+            reqType: 'post',
+            payload: req,
+        });
+
+        return res.data;
     },
 };
 

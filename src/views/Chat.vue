@@ -4,10 +4,27 @@
             <div class="chat-dialogs">
                 <div
                     class="chat-dialog"
-                    v-for="(user, userIndex) in preparedUsers"
-                    :key="userIndex"
-                    @click="selectUser(user)">
-                    {{ user.username }}
+                    v-for="dialog in dialogs"
+                    :key="dialog._id"
+                    @click="selectDialog({ dialogId: dialog._id, recieveId: correctRecieveId(dialog.authorId._id, dialog.recieveId._id) })">
+                    {{ formatedDialogName(dialog) }}
+                </div>
+                <div class="chat-dialog__add" @click="toggleCreateDialog">новый диалог</div>
+                <div class="chat-dialog__users" v-if="isCreateDialogVisible">
+                    <div class="chat-dialog__users--close" @click="toggleCreateDialog">x</div>
+                    <div class="chat-dialog__users--search">
+                        <input type="text" placeholder="Введите имя...">
+                    </div>
+                    <div class="chat-dialog__users--list">
+                        <div
+                            class="chat-dialog__users--list--block"
+                            v-for="user in preparedUsers"
+                            :key="user._id"
+                            @click="createDialog(user._id)"
+                        >
+                            {{ user.username }}
+                        </div>
+                    </div>
                 </div>
             </div>
             <div v-show="!dialog.recieveId" class="chat-none-selected"><div>выберите диалог</div></div>
@@ -43,6 +60,7 @@
                             ref="sendMessageInput"
                             type="text"
                             v-model="message.current"
+                            placeholder="Напишите что-нибудь..."
                             @keyup.enter="sendMessage">
                         <div class="chat-send__button">
                             <v-btn
@@ -62,7 +80,7 @@
 </template>
 
 <script>
-import { mapGetters, mapActions } from 'vuex';
+import { mapGetters, mapActions, mapMutations } from 'vuex';
 import moment from 'moment';
 
 export default {
@@ -74,19 +92,26 @@ export default {
                 list: [],
             },
             dialog: {
+                id: null,
                 recieveId: null,
                 name: '',
             },
             isScrollEnded: true,
+            isScrollUpped: false,
             allMessagesReaded: true,
             unreadMessagesCount: 0,
             isFocused: false,
+            lastScrollHeight: 0,
+            isCreateDialogVisible: false,
         };
     },
     computed: {
         ...mapGetters({
             userInfo: 'globals/userInfo',
             messages: 'chat/messages',
+            dialogs: 'chat/dialogs',
+            messagesCount: 'chat/messagesCount',
+            dialogId: 'chat/dialogId',
             accounts: 'globals/accounts',
             io: 'globals/socket',
         }),
@@ -130,6 +155,8 @@ export default {
     },
     async created() {
         await this.getAccounts();
+        await this.getDialogs();
+        this.watchNewDialog();
         this.watchNewMessage();
     },
     mounted() {
@@ -138,6 +165,8 @@ export default {
         window.onfocus = () => {
             this.isFocused = true;
 
+            console.log('focused');
+
             if (this.isUnreadMessagesExists) {
                 this.readAllMessages();
             }
@@ -145,61 +174,120 @@ export default {
 
         window.onblur = () => {
             this.isFocused = false;
+
+            console.log('blured');
         };
+    },
+    unmounted() {
+        this.messages = [];
+        this.dialogs = [];
     },
     watch: {
         isScrollEnded() {
+            console.log('ended');
             if (this.isUnreadMessagesExists) {
                 this.readAllMessages();
+            }
+        },
+        isScrollUpped() {
+            if (this.isScrollUpped) {
+                console.log('upped');
+                this.moreMessages();
             }
         },
     },
     methods: {
         ...mapActions({
             getAccounts: 'globals/getAccounts',
+            getDialogs: 'chat/getDialogs',
             addMessage: 'chat/addMessage',
             getMessages: 'chat/getMessages',
+            getMoreMessages: 'chat/getMoreMessages',
+        }),
+
+        ...mapMutations({
+            CLEAR_MESSAGES: 'chat/CLEAR_MESSAGES',
         }),
 
         async sendMessage() {
             if (this.message.current) {
                 const data = {
-                    authorId: {
-                        _id: this.userInfo._id,
-                        username: this.userInfo.username,
-                    },
                     recieveId: this.dialog.recieveId,
                     text: this.message.current,
                     createdAt: Date.now(),
                 };
 
+                if (this.preparedMessages.length) {
+                    data.dialogId = this.dialog.id;
+                }
+
+                const res = await this.addMessage(data);
+
+                this.dialog.id = res.dialogId;
                 this.message.current = '';
 
                 new Promise(resolve => {
                     resolve();
                 }).then(() => {
-                    this.messages.push(data);
+                    this.messages.push(res);
                 })
                     .then(() => {
                         this.lastMessageScroll();
                     });
 
-                await this.addMessage(data);
+                this.io.emit('message', res);
+                this.io.emit('dialog', res);
 
-                this.io.emit('message', data);
+                if (!this.dialogs.some(item => item._id === res.dialogId)) {
+                    this.dialogs.unshift({
+                        authorId: res.authorId,
+                        recieveId: res.recieveId,
+                        _id: res.dialogId,
+                    });
+                }
             }
         },
 
-        async selectUser(user) {
-            if (this.dialog.recieveId !== user._id) {
-                this.dialog = {
-                    recieveId: user._id,
-                    name: user.username,
-                };
+        async selectDialog({ dialogId, recieveId }) {
+            if (this.dialog.id !== dialogId) {
+                this.clearAllData();
 
-                await this.getMessages({ authorId: this.userInfo._id, recieveId: user._id });
+                this.dialog.id = dialogId;
+                this.dialog.recieveId = recieveId;
+
+                await this.getMessages({ dialogId });
 
                 this.lastMessageScroll();
+            }
+        },
+
+        async createDialog(recieveId) {
+            this.clearAllData();
+
+            this.dialog.recieveId = recieveId;
+
+            const dialog = this.dialogs.find(item => item.recieveId._id === recieveId || item.authorId._id === recieveId);
+
+            this.dialog.recieveId = this.correctRecieveId(dialog.authorId._id, dialog.recieveId._id);
+            this.dialog.id = dialog._id;
+
+            if (dialog) {
+                await this.getMessages({ dialogId: dialog._id });
+            }
+
+            this.toggleCreateDialog();
+            this.lastMessageScroll();
+        },
+
+        async moreMessages() {
+            if (this.messagesCount > this.messages.length && this.isScrollUpped) {
+                setTimeout(async () => {
+                    await this.getMoreMessages({ dialogId: this.dialog.id });
+
+                    const block = this.$refs.messages;
+
+                    block.scrollTop = block.scrollHeight - this.lastScrollHeight;
+                }, 500);
             }
         },
 
@@ -213,22 +301,41 @@ export default {
             });
         },
 
-        isScrollBottom() {
+        isScrollBottom(block) {
+            block.scrollTop === block.scrollHeight - block.clientHeight
+                ? this.isScrollEnded = true
+                : this.isScrollEnded = false;
+
+            this.lastScrollHeight = block.scrollHeight;
+        },
+
+        isScrollTop(block) {
+            block.scrollTop === 0 && block.scrollHeight > 100
+                ? this.isScrollUpped = true
+                : this.isScrollUpped = false;
+
+            this.lastScrollHeight = block.scrollHeight;
+        },
+
+        checkScroll() {
             const block = this.$refs.messages;
-            if (block.scrollTop === block.scrollHeight - block.clientHeight) {
-                this.isScrollEnded = true;
-            } else {
-                this.isScrollEnded = false;
-            }
+
+            this.isScrollBottom(block);
+            this.isScrollTop(block);
         },
 
         scrollEvent() {
             const block = this.$refs.messages;
-            block.addEventListener('scroll', this.isScrollBottom);
+
+            block.addEventListener('scroll', this.checkScroll);
         },
 
         watchNewMessage() {
             this.io.on('message:recieved', async data => {
+                if (data.dialogId !== this.dialog.id) {
+                    return;
+                }
+
                 new Promise(resolve => {
                     resolve();
                 }).then(() => {
@@ -246,6 +353,22 @@ export default {
             });
         },
 
+        watchNewDialog() {
+            this.io.on('dialog:recieved', async data => {
+                new Promise(resolve => {
+                    resolve();
+                }).then(() => {
+                    if (!this.dialogs.some(item => item._id === data.dialogId)) {
+                        this.dialogs.unshift({
+                            authorId: data.authorId,
+                            recieveId: data.recieveId,
+                            _id: data.dialogId,
+                        });
+                    }
+                });
+            });
+        },
+
         readAllMessages() {
             setTimeout(() => {
                 for (let i = 0; i < this.unreadMessagesCount; i++) {
@@ -260,13 +383,42 @@ export default {
         convertDate(date) {
             if (moment() >= date) {
                 return moment(date)
-                    .lang('ru')
+                    .locale('ru')
                     .format('H:mm');
             }
+
             return moment(date)
-                .lang('ru')
+                .locale('ru')
                 .fromNow();
-            return new Date(date).toLocaleString('ru', { day: 'numeric', month: 'numeric', year: '2-digit', hour: 'numeric', minute: 'numeric' });
+        },
+
+        formatedDialogName(payload) {
+            let name = '';
+
+            payload.authorId.username === this.userInfo.username
+                ? name = payload.recieveId.username
+                : name = payload.authorId.username;
+
+            return name;
+        },
+
+        toggleCreateDialog() {
+            this.isCreateDialogVisible = !this.isCreateDialogVisible;
+        },
+
+        clearAllData() {
+            this.CLEAR_MESSAGES();
+            this.isScrollUpped = false;
+        },
+
+        correctRecieveId(authorId, recieveId) {
+            let ID = null;
+
+            this.userInfo._id === authorId
+                ? ID = recieveId
+                : ID = authorId;
+
+            return ID;
         },
     },
 };
@@ -303,6 +455,8 @@ export default {
             min-width: 300px;
             border-right: 1px solid gray;
             background: rgba(0,0,0, 0.1);
+            position: relative;
+            padding-bottom: 44px;
 
             .chat-dialog {
                 cursor: pointer;
@@ -311,6 +465,53 @@ export default {
 
                 &:hover {
                     background: rgba(0,0,0,0.25);
+                }
+
+                &__add {
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    text-align: center;
+                    padding: 10px;
+                    width: 100%;
+                    background: gray;
+                    color: white;
+                    cursor: pointer;
+                }
+
+                &__users {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: #e3e3e3;
+
+                    &--close {
+                        position: absolute;
+                        right: 10px;
+                        top: 2px;
+                        font-weight: bolder;
+                        cursor: pointer;
+                    }
+
+                    &--search {
+                        input {
+                            width: 100%;
+                            padding: 10px;
+                            padding-right: 20px;
+                            background: white;
+                            border: 1px solid gray;
+                        }
+                    }
+
+                    &--list {
+                        &--block {
+                            padding: 10px;
+                            border-bottom: 1px solid gray;
+                            cursor: pointer;
+                        }
+                    }
                 }
             }
         }
@@ -344,6 +545,7 @@ export default {
             width: 100%;
             padding: 15px;
             border-bottom: 1px solid gray;
+            height: 60px;
         }
 
         .flexbox {
