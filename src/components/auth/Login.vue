@@ -3,6 +3,16 @@
         <div class="login-wrapper">
             <div class="login__container">
                 <div class="login__title">Авторизация</div>
+                <component :is="'v-text-field'" v-model="test" label="напишите">
+                    <template #append>
+                        <v-icon
+                            large
+                            color="green darken-2"
+                        >
+                            mdi-domain
+                        </v-icon>
+                    </template>
+                </component>
                 <v-form>
                     <v-container>
                         <v-row>
@@ -63,6 +73,7 @@ export default {
             password: '',
             isLoading: false,
             checked: false,
+            test: '',
         };
     },
     computed: {
